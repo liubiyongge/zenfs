@@ -7,7 +7,7 @@
 #pragma once
 
 #include <cstdint>
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
 
 #include <errno.h>
 #include <libzbd/zbd.h>
@@ -162,7 +162,9 @@ class ZonedBlockDevice {
   std::condition_variable migrate_resource_;
   std::mutex migrate_zone_mtx_;
   std::atomic<bool> migrating_{false};
-
+  //Preserve tow zones for gC
+  Zone *gc_zone_{nullptr};
+  Zone *gc_aux_zone_{nullptr};
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
 
@@ -181,11 +183,15 @@ class ZonedBlockDevice {
   IOStatus Open(bool readonly, bool exclusive);
 
   Zone *GetIOZone(uint64_t offset);
-
+  //Get and set GC tow zones
+  Zone *GetGCZone() {return gc_zone_; }
+  void SetGCZone(Zone *zone) { gc_zone_ = zone; }
+  Zone *GetGCAuxZone() {return gc_aux_zone_; }
+  void SetGCAuxZone(Zone *zone) { gc_aux_zone_ = zone; }  
   IOStatus AllocateIOZone(Env::WriteLifeTimeHint file_lifetime, IOType io_type,
                           Zone **out_zone);
   IOStatus AllocateMetaZone(Zone **out_meta_zone);
-
+  IOStatus AllocateEmptyZoneForGC(bool is_aux);
   uint64_t GetFreeSpace();
   uint64_t GetUsedSpace();
   uint64_t GetReclaimableSpace();
@@ -244,4 +250,4 @@ class ZonedBlockDevice {
 
 }  // namespace ROCKSDB_NAMESPACE
 
-#endif  // !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#endif  // !defined(ROCKSDB_LITE) && !defined(OS_WIN)

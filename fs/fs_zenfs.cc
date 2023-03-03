@@ -4,7 +4,7 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
 
 #include "fs_zenfs.h"
 
@@ -20,6 +20,7 @@
 #include <sstream>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #ifdef ZENFS_EXPORT_PROMETHEUS
 #include "metrics_prometheus.h"
@@ -270,9 +271,26 @@ ZenFS::~ZenFS() {
 }
 
 void ZenFS::GCWorker() {
-  while (run_gc_worker_) {
-    usleep(1000 * 1000 * 10);
+  IOStatus s;  
+  s = zbd_->AllocateEmptyZoneForGC(false); /* main gc zone. */
+  if (!s.ok()) printf("allocateEmptyZoneForGC Fault.\n");
+  s = zbd_->AllocateEmptyZoneForGC(true); /* auxiliury gc zone. */
+  if (!s.ok()) printf("***[Err] AllocateEmptyZoneForGCAux fault.\n");
+  /* Due to some extents belongs to files being written, skip them. */
+  // indicate zone by zone.start
+  std::unordered_map<uint64_t> zones_skipgc; 
 
+  int nr_zone_waiting_for_gc = 0;
+  while (run_gc_worker_) {
+    //sleep 10s when no nr_zone waiting for gc
+    // if(!nr_zone_waiting_for_gc){
+    //   usleep(1000 * 1000 * 10);
+    // }
+    /* If there is no zones waiting for gc, wait for 5s. */
+    if(!nr_zone_waiting_for_gc){
+      usleep(1000 * 1000 * 5);
+    }
+    //static space uti
     uint64_t non_free = zbd_->GetUsedSpace() + zbd_->GetReclaimableSpace();
     uint64_t free = zbd_->GetFreeSpace();
     uint64_t free_percent = (100 * free) / (free + non_free);
@@ -287,36 +305,69 @@ void ZenFS::GCWorker() {
 
     GetZenFSSnapshot(snapshot, options);
 
-    uint64_t threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));
+    //空闲空间小于20才会开始垃圾回收，如freepecert = 10 垃圾率70%以上Zone的开始来及,依次回收所有Zone
+    uint64_t threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));    
     std::set<uint64_t> migrate_zones_start;
+    //空闲空间小于20才会开始垃圾回收，如freepecert = 10 垃圾率70%以上Zone的开始来及,一次回收所有Zone
+    // for (const auto& zone : snapshot.zones_) {
+    //   if (zone.capacity == 0) {
+    //     uint64_t garbage_percent_approx =
+    //         100 - 100 * zone.used_capacity / zone.max_capacity;
+    //     if (garbage_percent_approx > threshold &&
+    //         garbage_percent_approx < 100) {
+    //       migrate_zones_start.emplace(zone.start);
+    //     }
+    //   }
+    // }
+    uint64_t migrate_zone_start;
+    uint64_t migrate_zone_garbage_percent = 0;
+    nr_zone_waiting_for_gc = 0;
+    zones_skipgc = GetZonesSkipGC();
     for (const auto& zone : snapshot.zones_) {
-      if (zone.capacity == 0) {
-        uint64_t garbage_percent_approx =
-            100 - 100 * zone.used_capacity / zone.max_capacity;
-        if (garbage_percent_approx > threshold &&
-            garbage_percent_approx < 100) {
-          migrate_zones_start.emplace(zone.start);
+      if(zone.capacity != 0) continue;
+      if(zones_skipgc.count(zone.start)!= 0) continue;
+      if(zone.start == zbd_->GetGCZone()->start_) continue;
+      if(zbd_->GetGCAuxZone() && zone.start == zbd_->GetGCAuxZone()->start_) continue;
+      uint64_t garbage_percent_approx =
+             100 - 100 * zone.used_capacity / zone.max_capacity;
+      //无效空间占比为小，为0则不用垃圾回收。
+      if(garbage_percent_approx > threshold && garbage_percent_approx < 100){
+        migrate_zone_garbage_percent++;
+        if(garbage_percent_approx > migrate_zone_garbage_percent){
+          migrate_zone_start = zone.start;
+          migrate_zone_garbage_percent = garbage_percent_approx;
         }
       }
     }
-
+    //选取到Zone则继续等待
+    if(migrate_zone_garbage_percent =0) continue;
+    //一次回收一个Zone
     std::vector<ZoneExtentSnapshot*> migrate_exts;
     for (auto& ext : snapshot.extents_) {
-      if (migrate_zones_start.find(ext.zone_start) !=
-          migrate_zones_start.end()) {
+      if(ext.zone_start == migrate_zone_start){
         migrate_exts.push_back(&ext);
       }
     }
+    //吸收所有在待回收Zone中的extent
+    // std::vector<ZoneExtentSnapshot*> migrate_exts;
+    // for (auto& ext : snapshot.extents_) {
+    //   if (migrate_zones_start.find(ext.zone_start) !=
+    //       migrate_zones_start.end()) {
+    //     migrate_exts.push_back(&ext);
+    //   }
+    // }
 
     if (migrate_exts.size() > 0) {
       IOStatus s;
-      Info(logger_, "Garbage collecting %d extents \n",
-           (int)migrate_exts.size());
+      // Info(logger_, "Garbage collecting %d extents \n",
+      //      (int)migrate_exts.size());
+      Info(logger_, "Garbage Collecting 1 Extents with %d garbage percent\n", migrate_zone_garbage_percent);
       s = MigrateExtents(migrate_exts);
       if (!s.ok()) {
         Error(logger_, "Garbage collection failed");
       }
     }
+    nr_zone_waiting_for_gc--;
   }
 }
 
@@ -331,6 +382,26 @@ IOStatus ZenFS::Repair() {
   }
 
   return IOStatus::OK();
+}
+
+
+std::set<uint64_t> ZenFS::GetZonesSkipGC() {
+  std::set<uint64_t> zones_skipgc;
+  std::lock_guard<std::mutex> file_lock(files_mtx_);
+  for (const auto &file_it : files_) {
+    ZoneFile &file = *(file_it.second);
+    if (file.TryAcquireWRLock()) {
+      file.ReleaseWRLock();
+      continue;
+    }
+
+    for (auto *ext : file.GetExtents()) {
+        zones_skipgc.insert(ext->zone_->start_);
+      }
+    }
+  }
+
+  return zones_skipgc;
 }
 
 std::string ZenFS::FormatPathLexically(fs::path filepath) {
@@ -1752,9 +1823,9 @@ IOStatus ZenFS::MigrateExtents(
   for (auto* ext : extents) {
     std::string fname = ext->filename;
     // We only migrate SST file extents
-    if (ends_with(fname, ".sst")) {
+    // if (ends_with(fname, ".sst")) {
       file_extents[fname].emplace_back(ext);
-    }
+    // }
   }
 
   for (const auto& it : file_extents) {
@@ -1772,6 +1843,9 @@ IOStatus ZenFS::MigrateFileExtents(
   IOStatus s = IOStatus::OK();
   Info(logger_, "MigrateFileExtents, fname: %s, extent count: %lu",
        fname.data(), migrate_exts.size());
+  
+  //如果GC Zone不足，回收用作GC Zone
+  Zone *zone_in_gc = nullptr;
 
   // The file may be deleted by other threads, better double check.
   auto zfile = GetFile(fname);
@@ -1806,6 +1880,7 @@ IOStatus ZenFS::MigrateFileExtents(
       continue;
     }
 
+    zone_in_gc = zbd_->GetIOZone((*it)->zone_start);
     Zone* target_zone = nullptr;
 
     // Allocate a new migration zone.
@@ -1854,8 +1929,30 @@ IOStatus ZenFS::MigrateFileExtents(
 
   Info(logger_, "MigrateFileExtents Finished, fname: %s, extent count: %lu",
        fname.data(), migrate_exts.size());
+
+  //后备GC Zone用完了，这个Zone用做后背GC Zone
+  s = ReplaceGCZones(zone_in_gc);
+  if(!s.ok()) {
+    Info(logger_, "Zone In GC Acquire Failure.");
+  }
   return IOStatus::OK();
 }
+
+
+IOStatus ZenFS::ReplaceGCZones(Zone *zone_in_gc) {
+  IOStatus s;
+  if (zbd_->GetGCAuxZone() == nullptr) {
+    bool acquired = zone_in_gc->Acquire();
+    if (!acquired) return IOStatus::Corruption("Zone In GC Acquire Failure.");
+    s = zone_in_gc->Reset();
+    if (!s.ok()) return s;
+    zbd_->SetGCAuxZone(zone_in_gc);
+    // printf("***[Log] Add GCAux Zone %ld\n", zone_in_gc->GetZoneNr());
+  }
+
+  return IOStatus::OK();
+}
+
 
 extern "C" FactoryFunc<FileSystem> zenfs_filesystem_reg;
 
@@ -1943,4 +2040,4 @@ std::map<std::string, std::string> ListZenFileSystems() {
 }
 }  // namespace ROCKSDB_NAMESPACE
 
-#endif  // !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#endif  // !defined(ROCKSDB_LITE) && !defined(OS_WIN)

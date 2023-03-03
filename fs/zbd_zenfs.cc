@@ -647,6 +647,30 @@ IOStatus ZonedBlockDevice::AllocateEmptyZone(Zone **zone_out) {
   return IOStatus::OK();
 }
 
+IOStatus ZonedBlockDevice::AllocateEmptyZoneForGC(bool is_aux) {
+  bool get_token = false;
+  IOStatus s = IOStatus::OK();
+  Zone *allocated = nullptr;
+  if(!is_aux){
+    WaitForOpenIOZoneToken(false);
+    while (!get_token) get_token = GetActiveIOZoneTokenIfAvailable();
+  }
+
+
+  s = AllocateEmptyZone(&allocated);
+  if(!is_aux){
+    if (!s.ok()) {
+      PutOpenIOZoneToken();
+      PutActiveIOZoneToken();
+      return s;
+    }
+  }
+  if (!is_aux) SetGCZone(allocated);
+  else SetGCAuxZone(allocated);
+
+  return s;
+}
+
 IOStatus ZonedBlockDevice::InvalidateCache(uint64_t pos, uint64_t size) {
   int ret = zbd_be_->InvalidateCache(pos, size);
 
@@ -701,9 +725,30 @@ IOStatus ZonedBlockDevice::TakeMigrateZone(Zone **out_zone,
 
   migrating_ = true;
 
-  unsigned int best_diff = LIFETIME_DIFF_NOT_GOOD;
-  auto s =
-      GetBestOpenZoneMatch(file_lifetime, &best_diff, out_zone, min_capacity);
+  // unsigned int best_diff = LIFETIME_DIFF_NOT_GOOD;
+  // auto s =
+  //     GetBestOpenZoneMatch(file_lifetime, &best_diff, out_zone, min_capacity);
+    /* Avoid compiler error report. */
+  if (file_lifetime) {}
+  if (min_capacity) {}
+  Zone *gczone = GetGCZone();
+  if (gczone->GetCapacityLeft() < min_capacity) {
+    s = gczone->Finish();
+    if (!s.ok()) {
+      printf("***[Err] GCZone %ld Finish Failed.\n", gczone->GetZoneNr());
+      migrating_ = false;
+      return s;
+    }
+    s = gczone->CheckRelease();
+    if (!s.ok()) {
+      printf("***[Err] GCZone %ld CheckRelease Failed.\n", gczone->GetZoneNr());
+      migrating_ = false;
+      return s;
+    }
+    SetGCZone(GetGCAuxZone());
+    SetGCAuxZone(nullptr);
+  }
+  *out_zone = GetGCZone();
   if (s.ok() && (*out_zone) != nullptr) {
     Info(logger_, "TakeMigrateZone: %lu", (*out_zone)->start_);
   } else {

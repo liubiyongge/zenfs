@@ -6,7 +6,7 @@
 
 #pragma once
 
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
 
 #include <stdlib.h>
 #include <string.h>
@@ -101,4 +101,4 @@ class ZoneFsBackend : public ZonedBlockDeviceBackend {
 
 }  // namespace ROCKSDB_NAMESPACE
 
-#endif  // !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#endif  // !defined(ROCKSDB_LITE) && !defined(OS_WIN)

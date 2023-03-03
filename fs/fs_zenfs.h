@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 
 #include <memory>
 #include <thread>
+#include <set>
 
 #include "io_zenfs.h"
 #include "metrics.h"
@@ -28,7 +29,7 @@ namespace fs = std::filesystem;
 
 namespace ROCKSDB_NAMESPACE {
 
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
 
 class ZoneSnapshot;
 class ZoneFileSnapshot;
@@ -447,12 +448,12 @@ class ZenFS : public FileSystemWrapper {
     return IOStatus::NotSupported(
         "MemoryMappedFileBuffer is not implemented in ZenFS");
   }
-
+  std::set<uint64_t> ZenFS::GetZonesSkipGC();
   void GetZenFSSnapshot(ZenFSSnapshot& snapshot,
                         const ZenFSSnapshotOptions& options);
 
   IOStatus MigrateExtents(const std::vector<ZoneExtentSnapshot*>& extents);
-
+  IOStatus ReplaceGCZones(Zone *zone_in_gc);
   IOStatus MigrateFileExtents(
       const std::string& fname,
       const std::vector<ZoneExtentSnapshot*>& migrate_exts);
@@ -463,7 +464,7 @@ class ZenFS : public FileSystemWrapper {
   const uint64_t GC_SLOPE = 3; /* GC agressiveness */
   void GCWorker();
 };
-#endif  // !defined(ROCKSDB_LITE) && defined(OS_LINUX)
+#endif  // !defined(ROCKSDB_LITE) && !defined(OS_WIN)
 
 Status NewZenFS(
     FileSystem** fs, const std::string& bdevname,
