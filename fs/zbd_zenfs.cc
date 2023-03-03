@@ -732,8 +732,9 @@ IOStatus ZonedBlockDevice::TakeMigrateZone(Zone **out_zone,
   if (file_lifetime) {}
   if (min_capacity) {}
   Zone *gczone = GetGCZone();
+  IOStatus s;
   if (gczone->GetCapacityLeft() < min_capacity) {
-    s = gczone->Finish();
+     s = gczone->Finish();
     if (!s.ok()) {
       printf("***[Err] GCZone %ld Finish Failed.\n", gczone->GetZoneNr());
       migrating_ = false;

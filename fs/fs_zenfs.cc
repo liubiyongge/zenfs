@@ -278,7 +278,7 @@ void ZenFS::GCWorker() {
   if (!s.ok()) printf("***[Err] AllocateEmptyZoneForGCAux fault.\n");
   /* Due to some extents belongs to files being written, skip them. */
   // indicate zone by zone.start
-  std::unordered_map<uint64_t> zones_skipgc; 
+  std::set<uint64_t> zones_skipgc; 
 
   int nr_zone_waiting_for_gc = 0;
   while (run_gc_worker_) {
@@ -319,7 +319,7 @@ void ZenFS::GCWorker() {
     //     }
     //   }
     // }
-    uint64_t migrate_zone_start;
+    uint64_t migrate_zone_start = 0;
     uint64_t migrate_zone_garbage_percent = 0;
     nr_zone_waiting_for_gc = 0;
     zones_skipgc = GetZonesSkipGC();
@@ -340,7 +340,7 @@ void ZenFS::GCWorker() {
       }
     }
     //选取到Zone则继续等待
-    if(migrate_zone_garbage_percent =0) continue;
+    if(migrate_zone_garbage_percent == 0) continue;
     //一次回收一个Zone
     std::vector<ZoneExtentSnapshot*> migrate_exts;
     for (auto& ext : snapshot.extents_) {
@@ -358,10 +358,9 @@ void ZenFS::GCWorker() {
     // }
 
     if (migrate_exts.size() > 0) {
-      IOStatus s;
       // Info(logger_, "Garbage collecting %d extents \n",
       //      (int)migrate_exts.size());
-      Info(logger_, "Garbage Collecting 1 Extents with %d garbage percent\n", migrate_zone_garbage_percent);
+      Info(logger_, "Garbage Collecting 1 Extents with %ld garbage percent\n", migrate_zone_garbage_percent);
       s = MigrateExtents(migrate_exts);
       if (!s.ok()) {
         Error(logger_, "Garbage collection failed");
@@ -398,8 +397,8 @@ std::set<uint64_t> ZenFS::GetZonesSkipGC() {
     for (auto *ext : file.GetExtents()) {
         zones_skipgc.insert(ext->zone_->start_);
       }
-    }
   }
+  
 
   return zones_skipgc;
 }

@@ -448,7 +448,7 @@ class ZenFS : public FileSystemWrapper {
     return IOStatus::NotSupported(
         "MemoryMappedFileBuffer is not implemented in ZenFS");
   }
-  std::set<uint64_t> ZenFS::GetZonesSkipGC();
+  std::set<uint64_t> GetZonesSkipGC();
   void GetZenFSSnapshot(ZenFSSnapshot& snapshot,
                         const ZenFSSnapshotOptions& options);
 
