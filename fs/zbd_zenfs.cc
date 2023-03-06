@@ -571,7 +571,7 @@ IOStatus ZonedBlockDevice::FinishCheapestIOZone() {
 
   // If all non-busy zones are empty or full, we should return success.
   if (finish_victim == nullptr) {
-    Info(logger_, "All non-busy zones are empty or full, skip.");
+    //Info(logger_, "All non-busy zones are empty or full, skip.");
     return IOStatus::OK();
   }
 
@@ -708,7 +708,7 @@ IOStatus ZonedBlockDevice::ReleaseMigrateZone(Zone *zone) {
   {
     std::unique_lock<std::mutex> lock(migrate_zone_mtx_);
     migrating_ = false;
-    if (zone != nullptr) {
+    if (zone != nullptr && zone != GetGCZone()) {
       s = zone->CheckRelease();
       Info(logger_, "ReleaseMigrateZone: %lu", zone->start_);
     }

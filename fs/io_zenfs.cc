@@ -468,12 +468,11 @@ void ZoneFile::PushExtent() {
 
 IOStatus ZoneFile::AllocateNewZone() {
   Zone* zone;
-  IOStatus s = zbd_->AllocateIOZone(lifetime_, io_type_, &zone);
-
-  if (!s.ok()) return s;
-  if (!zone) {
-    return IOStatus::NoSpace("Zone allocation failure\n");
-  }
+  do{
+    IOStatus s = zbd_->AllocateIOZone(lifetime_, io_type_, &zone);
+    if (!s.ok()) return s;
+  }while(!zone);
+  
   SetActiveZone(zone);
   extent_start_ = active_zone_->wp_;
   extent_filepos_ = file_size_;

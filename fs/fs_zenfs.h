@@ -27,6 +27,9 @@ namespace fs = std::filesystem;
 #include "version.h"
 #include "zbd_zenfs.h"
 
+#ifndef WITH_TERARKDB
+  #define WITH_TERARKDB
+#endif
 namespace ROCKSDB_NAMESPACE {
 
 #if !defined(ROCKSDB_LITE) && !defined(OS_WIN)

@@ -286,9 +286,9 @@ void ZenFS::GCWorker() {
     // if(!nr_zone_waiting_for_gc){
     //   usleep(1000 * 1000 * 10);
     // }
-    /* If there is no zones waiting for gc, wait for 5s. */
+    /* If there is no zones waiting for gc, wait for 1s. */
     if(!nr_zone_waiting_for_gc){
-      usleep(1000 * 1000 * 5);
+      usleep(1000 * 1000 * 1);
     }
     //static space uti
     uint64_t non_free = zbd_->GetUsedSpace() + zbd_->GetReclaimableSpace();
@@ -332,14 +332,14 @@ void ZenFS::GCWorker() {
              100 - 100 * zone.used_capacity / zone.max_capacity;
       //无效空间占比为小，为0则不用垃圾回收。
       if(garbage_percent_approx > threshold && garbage_percent_approx < 100){
-        migrate_zone_garbage_percent++;
+        nr_zone_waiting_for_gc++;
         if(garbage_percent_approx > migrate_zone_garbage_percent){
           migrate_zone_start = zone.start;
           migrate_zone_garbage_percent = garbage_percent_approx;
         }
       }
     }
-    //选取到Zone则继续等待
+    //没选取到Zone则继续等待
     if(migrate_zone_garbage_percent == 0) continue;
     //一次回收一个Zone
     std::vector<ZoneExtentSnapshot*> migrate_exts;
@@ -360,7 +360,7 @@ void ZenFS::GCWorker() {
     if (migrate_exts.size() > 0) {
       // Info(logger_, "Garbage collecting %d extents \n",
       //      (int)migrate_exts.size());
-      Info(logger_, "Garbage Collecting 1 Extents with %ld garbage percent\n", migrate_zone_garbage_percent);
+      Info(logger_, "Garbage Collecting %ld Zone with %ld garbage percent\n", migrate_zone_start, migrate_zone_garbage_percent);
       s = MigrateExtents(migrate_exts);
       if (!s.ok()) {
         Error(logger_, "Garbage collection failed");

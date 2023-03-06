@@ -120,7 +120,7 @@ std::unique_ptr<ZoneList> ZbdlibBackend::ListZones() {
     return nullptr;
   }
   //limit zone number, accelerate test
-  nr_zones_ = nr_zones = 500;
+  nr_zones_ = nr_zones = 100;
   std::unique_ptr<ZoneList> zl(new ZoneList(zones, nr_zones));
 
   return zl;
