@@ -381,6 +381,7 @@ void ZonedBlockDevice::LogGarbageInfo() {
 }
 
 ZonedBlockDevice::~ZonedBlockDevice() {
+  printf("Data Movement in Garbage Collecting %lu MB\n", gc_bytes_written_.load() / (1024 * 1024));
   for (const auto z : meta_zones) {
     delete z;
   }
