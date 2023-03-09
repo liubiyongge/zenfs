@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <ctime>
 #include <fcntl.h>
 #include <libzbd/zbd.h>
 #include <linux/blkzoned.h>
@@ -468,15 +469,20 @@ void ZoneFile::PushExtent() {
 
 IOStatus ZoneFile::AllocateNewZone() {
   Zone* zone;
+  int wait_count = 0;
   do{
+    wait_count++;
     IOStatus s = zbd_->AllocateIOZone(lifetime_, io_type_, &zone);
-    if (!s.ok()) return s;
+    if (!s.ok()){
+      return s;
+    }
+    //wait for GC
+    usleep(std::rand() %(std::min(4000 * wait_count, 1000000))); 
   }while(!zone);
   
   SetActiveZone(zone);
   extent_start_ = active_zone_->wp_;
   extent_filepos_ = file_size_;
-
   /* Persist metadata so we can recover the active extent using
      the zone write pointer in case there is a crash before syncing */
   return PersistMetadata();

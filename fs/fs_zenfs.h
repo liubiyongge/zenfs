@@ -27,9 +27,9 @@ namespace fs = std::filesystem;
 #include "version.h"
 #include "zbd_zenfs.h"
 
-#ifndef WITH_TERARKDB
-  #define WITH_TERARKDB
-#endif
+// #ifndef WITH_TERARKDB
+//   #define WITH_TERARKDB
+// #endif
 namespace ROCKSDB_NAMESPACE {
 
 #if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
@@ -463,7 +463,7 @@ class ZenFS : public FileSystemWrapper {
 
  private:
   const uint64_t GC_START_LEVEL =
-      20;                      /* Enable GC when < 20% free space available */
+      30;                      /* Enable GC when < 20% free space available */
   const uint64_t GC_SLOPE = 3; /* GC agressiveness */
   void GCWorker();
 };

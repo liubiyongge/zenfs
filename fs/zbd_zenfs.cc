@@ -710,7 +710,7 @@ IOStatus ZonedBlockDevice::ReleaseMigrateZone(Zone *zone) {
     migrating_ = false;
     if (zone != nullptr && zone != GetGCZone()) {
       s = zone->CheckRelease();
-      Info(logger_, "ReleaseMigrateZone: %lu", zone->start_);
+      Info(logger_, "ReleaseMigrateZone: %lu", zone->GetZoneNr());
     }
   }
   migrate_resource_.notify_one();
@@ -736,13 +736,13 @@ IOStatus ZonedBlockDevice::TakeMigrateZone(Zone **out_zone,
   if (gczone->GetCapacityLeft() < min_capacity) {
      s = gczone->Finish();
     if (!s.ok()) {
-      printf("***[Err] GCZone %ld Finish Failed.\n", gczone->GetZoneNr());
+      printf("***[Err] GCZone %lu Finish Failed.\n", gczone->GetZoneNr());
       migrating_ = false;
       return s;
     }
     s = gczone->CheckRelease();
     if (!s.ok()) {
-      printf("***[Err] GCZone %ld CheckRelease Failed.\n", gczone->GetZoneNr());
+      printf("***[Err] GCZone %lu CheckRelease Failed.\n", gczone->GetZoneNr());
       migrating_ = false;
       return s;
     }
@@ -751,9 +751,10 @@ IOStatus ZonedBlockDevice::TakeMigrateZone(Zone **out_zone,
   }
   *out_zone = GetGCZone();
   if (s.ok() && (*out_zone) != nullptr) {
-    Info(logger_, "TakeMigrateZone: %lu", (*out_zone)->start_);
+    Info(logger_, "TakeMigrateZone: %lu", (*out_zone)->GetZoneNr());
   } else {
     migrating_ = false;
+    Info(logger_, "GC Zone have used out\n");
   }
 
   return s;
@@ -857,8 +858,8 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
   if (allocated_zone) {
     assert(allocated_zone->IsBusy());
     Debug(logger_,
-          "Allocating zone(new=%d) start: 0x%lx wp: 0x%lx lt: %d file lt: %d\n",
-          new_zone, allocated_zone->start_, allocated_zone->wp_,
+          "Allocating zone(new=%d) nr: %lu start: 0x%lx wp: 0x%lx lt: %d file lt: %d\n",
+          new_zone, allocated_zone->GetZoneNr(), allocated_zone->start_, allocated_zone->wp_,
           allocated_zone->lifetime_, file_lifetime);
   } else {
     PutOpenIOZoneToken();

@@ -360,7 +360,7 @@ void ZenFS::GCWorker() {
     if (migrate_exts.size() > 0) {
       // Info(logger_, "Garbage collecting %d extents \n",
       //      (int)migrate_exts.size());
-      Info(logger_, "Garbage Collecting %ld Zone with %ld garbage percent\n", migrate_zone_start, migrate_zone_garbage_percent);
+      Info(logger_, "Garbage Collecting Zone %lu with %ld garbage percent\n", migrate_zone_start / zbd_->GetZoneSize(), migrate_zone_garbage_percent);
       s = MigrateExtents(migrate_exts);
       if (!s.ok()) {
         Error(logger_, "Garbage collection failed");
@@ -564,7 +564,7 @@ IOStatus ZenFS::SyncFileExtents(ZoneFile* zoneFile,
   // Clear changed extents' zone stats
   for (size_t i = 0; i < new_extents.size(); ++i) {
     ZoneExtent* old_ext = old_extents[i];
-    if (old_ext->start_ != new_extents[i]->start_) {
+    if (old_ext->zone_ != new_extents[i]->zone_) {
       old_ext->zone_->used_capacity_ -= old_ext->length_;
     }
     delete old_ext;
@@ -1674,9 +1674,9 @@ Status NewZenFS(FileSystem** fs, const ZbdBackendType backend_type,
     fprintf(stderr, "ZenFS: Could not create logger");
   } else {
     logger->SetInfoLogLevel(DEBUG_LEVEL);
-#ifdef WITH_TERARKDB
-    logger->SetInfoLogLevel(INFO_LEVEL);
-#endif
+// #ifdef WITH_TERARKDB
+//     logger->SetInfoLogLevel(INFO_LEVEL);
+// #endif
   }
 #endif
 
@@ -1817,6 +1817,13 @@ void ZenFS::GetZenFSSnapshot(ZenFSSnapshot& snapshot,
 IOStatus ZenFS::MigrateExtents(
     const std::vector<ZoneExtentSnapshot*>& extents) {
   IOStatus s;
+  //all extents in one zone
+  //如果GC Zone不足，回收用作GC Zone
+  Zone *zone_in_gc = zbd_->GetIOZone(extents[0]->zone_start);
+  //锁定Zone in GC,优先分配给GC
+  if(!zone_in_gc->Acquire()){
+    Info(logger_, " Before GC Time Zone In GC Acquire Failure.");
+  }
   // Group extents by their filename
   std::map<std::string, std::vector<ZoneExtentSnapshot*>> file_extents;
   for (auto* ext : extents) {
@@ -1833,6 +1840,13 @@ IOStatus ZenFS::MigrateExtents(
     s = zbd_->ResetUnusedIOZones();
     if (!s.ok()) break;
   }
+  if(!s.ok()) return s;
+  Info(logger_, "Zone %lu have been recycled", zone_in_gc->GetZoneNr());
+    //后备GC Zone用完了，这个Zone用做后背GC Zone
+  s = ReplaceGCZones(zone_in_gc);
+  if(!s.ok()) {
+    Info(logger_, "After GC Time Zone In GC Acquire Failure.");
+  }
   return s;
 }
 
@@ -1842,9 +1856,6 @@ IOStatus ZenFS::MigrateFileExtents(
   IOStatus s = IOStatus::OK();
   Info(logger_, "MigrateFileExtents, fname: %s, extent count: %lu",
        fname.data(), migrate_exts.size());
-  
-  //如果GC Zone不足，回收用作GC Zone
-  Zone *zone_in_gc = nullptr;
 
   // The file may be deleted by other threads, better double check.
   auto zfile = GetFile(fname);
@@ -1875,11 +1886,11 @@ IOStatus ZenFS::MigrateFileExtents(
                            });
 
     if (it == migrate_exts.end()) {
-      Info(logger_, "Migrate extent not found, ext_start: %lu", ext->start_);
+      Info(logger_, "Migrate extent not found, ext_start: %lu, fname: %s", ext->start_, fname.data());
       continue;
     }
 
-    zone_in_gc = zbd_->GetIOZone((*it)->zone_start);
+    
     Zone* target_zone = nullptr;
 
     // Allocate a new migration zone.
@@ -1926,14 +1937,9 @@ IOStatus ZenFS::MigrateFileExtents(
   SyncFileExtents(zfile.get(), new_extent_list);
   zfile->ReleaseWRLock();
 
-  Info(logger_, "MigrateFileExtents Finished, fname: %s, extent count: %lu",
+  Info(logger_, "MigrateFileExtents Finished, fname: %s, extent count: %lu\n",
        fname.data(), migrate_exts.size());
 
-  //后备GC Zone用完了，这个Zone用做后背GC Zone
-  s = ReplaceGCZones(zone_in_gc);
-  if(!s.ok()) {
-    Info(logger_, "Zone In GC Acquire Failure.");
-  }
   return IOStatus::OK();
 }
 
@@ -1941,12 +1947,16 @@ IOStatus ZenFS::MigrateFileExtents(
 IOStatus ZenFS::ReplaceGCZones(Zone *zone_in_gc) {
   IOStatus s;
   if (zbd_->GetGCAuxZone() == nullptr) {
-    bool acquired = zone_in_gc->Acquire();
-    if (!acquired) return IOStatus::Corruption("Zone In GC Acquire Failure.");
+    // if (!zone_in_gc->Acquire()) return IOStatus::Corruption("Zone In GC Acquire Failure.");
     s = zone_in_gc->Reset();
     if (!s.ok()) return s;
     zbd_->SetGCAuxZone(zone_in_gc);
+    Info(logger_, "Add GCAux Zone %ld\n", zone_in_gc->GetZoneNr());
     // printf("***[Log] Add GCAux Zone %ld\n", zone_in_gc->GetZoneNr());
+  }else{
+    if (!zone_in_gc->Release()) {
+      Info(logger_, "After GC Time Zone In GC Release Failure.\n");
+    }
   }
 
   return IOStatus::OK();
