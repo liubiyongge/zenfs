@@ -328,6 +328,9 @@ void ZenFS::GCWorker() {
       if(zones_skipgc.count(zone.start)!= 0) continue;
       if(zone.start == zbd_->GetGCZone()->start_) continue;
       if(zbd_->GetGCAuxZone() && zone.start == zbd_->GetGCAuxZone()->start_) continue;
+      //level 0不用回收
+      if(zone.lifetime_ == Env::WLTH_MEDIUM) continue;
+      
       uint64_t garbage_percent_approx =
              100 - 100 * zone.used_capacity / zone.max_capacity;
       //无效空间占比为小，为0则不用垃圾回收。
@@ -492,8 +495,11 @@ IOStatus ZenFS::RollMetaZoneLocked() {
   /* Write an end record and finish the meta data zone if there is space left */
   if (old_meta_log->GetZone()->GetCapacityLeft())
     WriteEndRecord(old_meta_log.get());
-  if (old_meta_log->GetZone()->GetCapacityLeft())
+  if (old_meta_log->GetZone()->GetCapacityLeft()){
     old_meta_log->GetZone()->Finish();
+    Debug(logger_, "Finish metadata Zone %lu", old_meta_log->GetZone()->GetZoneNr());
+  }
+    
 
   std::string super_string;
   superblock_->EncodeTo(&super_string);

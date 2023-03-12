@@ -50,6 +50,7 @@ class ZoneSnapshot {
   uint64_t capacity;
   uint64_t used_capacity;
   uint64_t max_capacity;
+  Env::WriteLifeTimeHint lifetime_;
 
  public:
   ZoneSnapshot(const Zone& zone)
@@ -57,7 +58,8 @@ class ZoneSnapshot {
         wp(zone.wp_),
         capacity(zone.capacity_),
         used_capacity(zone.used_capacity_),
-        max_capacity(zone.max_capacity_) {}
+        max_capacity(zone.max_capacity_),
+        lifetime_(zone.lifetime_) {}
 };
 
 class ZoneExtentSnapshot {

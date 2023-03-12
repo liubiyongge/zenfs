@@ -408,7 +408,7 @@ unsigned int GetLifeTimeDiff(Env::WriteLifeTimeHint zone_lifetime,
   }
 
   if (zone_lifetime > file_lifetime) return zone_lifetime - file_lifetime;
-  if (zone_lifetime == file_lifetime) return LIFETIME_DIFF_COULD_BE_WORSE;
+  if (zone_lifetime == file_lifetime) return 0;
 
   return LIFETIME_DIFF_NOT_GOOD;
 }
@@ -526,6 +526,7 @@ IOStatus ZonedBlockDevice::ApplyFinishThreshold() {
         /* If there is less than finish_threshold_% remaining capacity in a
          * non-open-zone, finish the zone */
         s = z->Finish();
+        Debug(logger_, "Finish Zone %lu", z->GetZoneNr());
         if (!s.ok()) {
           z->Release();
           Debug(logger_, "Failed finishing zone");
@@ -575,8 +576,9 @@ IOStatus ZonedBlockDevice::FinishCheapestIOZone() {
     //Info(logger_, "All non-busy zones are empty or full, skip.");
     return IOStatus::OK();
   }
-
+  Debug(logger_, "Finish Zone %lu left %lu", finish_victim->GetZoneNr(), finish_victim->GetCapacityLeft());
   s = finish_victim->Finish();
+  
   IOStatus release_status = finish_victim->CheckRelease();
 
   if (s.ok()) {
@@ -602,17 +604,10 @@ IOStatus ZonedBlockDevice::GetBestOpenZoneMatch(
       if ((z->used_capacity_ > 0) && !z->IsFull() &&
           z->capacity_ >= min_capacity) {
         unsigned int diff = GetLifeTimeDiff(z->lifetime_, file_lifetime);
-        if (diff <= best_diff) {
-          if (allocated_zone != nullptr) {
-            s = allocated_zone->CheckRelease();
-            if (!s.ok()) {
-              IOStatus s_ = z->CheckRelease();
-              if (!s_.ok()) return s_;
-              return s;
-            }
-          }
+        if (diff >= 0 && diff <= 1) {
           allocated_zone = z;
           best_diff = diff;
+          break;
         } else {
           s = z->CheckRelease();
           if (!s.ok()) return s;
@@ -736,6 +731,7 @@ IOStatus ZonedBlockDevice::TakeMigrateZone(Zone **out_zone,
   IOStatus s;
   if (gczone->GetCapacityLeft() < min_capacity) {
      s = gczone->Finish();
+     Debug(logger_, "Finish GC Zone %lu", gczone->GetZoneNr());
     if (!s.ok()) {
       printf("***[Err] GCZone %lu Finish Failed.\n", gczone->GetZoneNr());
       migrating_ = false;
@@ -798,6 +794,7 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
 
   /* Try to fill an already open zone(with the best life time diff) */
   s = GetBestOpenZoneMatch(file_lifetime, &best_diff, &allocated_zone);
+  //best_diff == 0, find one; best_diff = LIFETIME_DIFF_COULD_BE_WORSE, No Find
   if (!s.ok()) {
     PutOpenIOZoneToken();
     return s;
@@ -812,21 +809,21 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
      * time diff not good but a better choice than to finish an existing zone
      * and open a new one
      */
-    if (allocated_zone != nullptr) {
-      if (!got_token && best_diff == LIFETIME_DIFF_COULD_BE_WORSE) {
-        Debug(logger_,
-              "Allocator: avoided a finish by relaxing lifetime diff "
-              "requirement\n");
-      } else {
-        s = allocated_zone->CheckRelease();
-        if (!s.ok()) {
-          PutOpenIOZoneToken();
-          if (got_token) PutActiveIOZoneToken();
-          return s;
-        }
-        allocated_zone = nullptr;
-      }
-    }
+    // if (allocated_zone != nullptr) {
+    //   if (!got_token && best_diff == LIFETIME_DIFF_COULD_BE_WORSE) {
+    //     Debug(logger_,
+    //           "Allocator: avoided a finish by relaxing lifetime diff "
+    //           "requirement\n");
+    //   } else {
+    //     s = allocated_zone->CheckRelease();
+    //     if (!s.ok()) {
+    //       PutOpenIOZoneToken();
+    //       if (got_token) PutActiveIOZoneToken();
+    //       return s;
+    //     }
+    //     allocated_zone = nullptr;
+    //   }
+    // }
 
     /* If we haven't found an open zone to fill, open a new zone */
     if (allocated_zone == nullptr) {
@@ -837,6 +834,7 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
           PutOpenIOZoneToken();
           return s;
         }
+        usleep(1000);
       }
 
       s = AllocateEmptyZone(&allocated_zone);
