@@ -604,7 +604,7 @@ IOStatus ZonedBlockDevice::GetBestOpenZoneMatch(
       if ((z->used_capacity_ > 0) && !z->IsFull() &&
           z->capacity_ >= min_capacity) {
         unsigned int diff = GetLifeTimeDiff(z->lifetime_, file_lifetime);
-        if (diff >= 0 && diff <= 1) {
+        if (diff <= 1) {
           allocated_zone = z;
           best_diff = diff;
           break;
