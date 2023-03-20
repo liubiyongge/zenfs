@@ -140,12 +140,13 @@ enum class ZbdBackendType {
 };
 
 class ZonedBlockDevice {
+ public:
+  std::shared_ptr<Logger> logger_;
  private:
   std::unique_ptr<ZonedBlockDeviceBackend> zbd_be_;
   std::vector<Zone *> io_zones;
   std::vector<Zone *> meta_zones;
   time_t start_time_;
-  std::shared_ptr<Logger> logger_;
   uint32_t finish_threshold_ = 0;
   std::atomic<uint64_t> bytes_written_{0};
   std::atomic<uint64_t> gc_bytes_written_{0};
@@ -189,7 +190,7 @@ class ZonedBlockDevice {
   Zone *GetGCAuxZone() {return gc_aux_zone_; }
   void SetGCAuxZone(Zone *zone) { gc_aux_zone_ = zone; }  
   IOStatus AllocateIOZone(Env::WriteLifeTimeHint file_lifetime, IOType io_type,
-                          Zone **out_zone);
+                          Zone **out_zone, uint64_t file_id);
   IOStatus AllocateMetaZone(Zone **out_meta_zone);
   IOStatus AllocateEmptyZoneForGC(bool is_aux);
   uint64_t GetFreeSpace();

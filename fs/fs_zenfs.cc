@@ -570,7 +570,7 @@ IOStatus ZenFS::SyncFileExtents(ZoneFile* zoneFile,
   // Clear changed extents' zone stats
   for (size_t i = 0; i < new_extents.size(); ++i) {
     ZoneExtent* old_ext = old_extents[i];
-    if (old_ext->zone_ != new_extents[i]->zone_) {
+    if (old_ext->start_ != new_extents[i]->start_) {
       old_ext->zone_->used_capacity_ -= old_ext->length_;
     }
     delete old_ext;

@@ -255,9 +255,10 @@ ZoneFile::~ZoneFile() { ClearExtents(); }
 void ZoneFile::ClearExtents() {
   for (auto e = std::begin(extents_); e != std::end(extents_); ++e) {
     Zone* zone = (*e)->zone_;
-
+    
     assert(zone && zone->used_capacity_ >= (*e)->length_);
     zone->used_capacity_ -= (*e)->length_;
+    Debug(zbd_->logger_, "zone %lu userd_capacity_ reduce to %lu by delete file %lu", zone->GetZoneNr(), zone->used_capacity_.load(), file_id_);
     delete *e;
   }
   extents_.clear();
@@ -472,12 +473,14 @@ IOStatus ZoneFile::AllocateNewZone() {
   int wait_count = 0;
   do{
     wait_count++;
-    IOStatus s = zbd_->AllocateIOZone(lifetime_, io_type_, &zone);
+    IOStatus s = zbd_->AllocateIOZone(lifetime_, io_type_, &zone, file_id_);
     if (!s.ok()){
       return s;
     }
     //wait for GC
-    usleep(std::rand() %(std::min(4000 * wait_count, 1000000))); 
+    if(!zone){
+      usleep(std::rand() %(std::min(4000 * wait_count, 1000000))); 
+    }
   }while(!zone);
   
   SetActiveZone(zone);
