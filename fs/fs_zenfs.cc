@@ -1920,10 +1920,10 @@ IOStatus ZenFS::MigrateFileExtents(
       zfile->MigrateData(ext->start_ - ZoneFile::SPARSE_HEADER_SIZE,
                          ext->length_ + ZoneFile::SPARSE_HEADER_SIZE,
                          target_zone);
-      zbd_->AddGCBytesWritten(ext->length_ + ZoneFile::SPARSE_HEADER_SIZE);
+      zbd_->AddGCBytesWritten(ext->length_ + ZoneFile::SPARSE_HEADER_SIZE, zfile->GetWriteLifeTimeHint());
     } else {
       zfile->MigrateData(ext->start_, ext->length_, target_zone);
-      zbd_->AddGCBytesWritten(ext->length_);
+      zbd_->AddGCBytesWritten(ext->length_, zfile->GetWriteLifeTimeHint());
     }
 
     // If the file doesn't exist, skip

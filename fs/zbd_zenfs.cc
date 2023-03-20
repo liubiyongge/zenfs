@@ -175,7 +175,7 @@ Zone *ZonedBlockDevice::GetIOZone(uint64_t offset) {
 ZonedBlockDevice::ZonedBlockDevice(std::string path, ZbdBackendType backend,
                                    std::shared_ptr<Logger> logger,
                                    std::shared_ptr<ZenFSMetrics> metrics)
-    : logger_(logger), metrics_(metrics) {
+    : logger_(logger), gc_bytes_written_(11, 0), metrics_(metrics) {
   if (backend == ZbdBackendType::kBlockDev) {
     zbd_be_ = std::unique_ptr<ZbdlibBackend>(new ZbdlibBackend(path));
     Info(logger_, "New Zoned Block Device: %s", zbd_be_->GetFilename().c_str());
@@ -383,7 +383,13 @@ void ZonedBlockDevice::LogGarbageInfo() {
 }
 
 ZonedBlockDevice::~ZonedBlockDevice() {
-  printf("Data Movement in Garbage Collecting %lu MB\n", gc_bytes_written_.load() / (1024 * 1024));
+  uint64_t sumGC = 0;
+  int len = gc_bytes_written_.size();
+  for(int i = 0; i < len; i++){
+    printf("Lifetime %d Data Movement in Garbage Collecting %lu MB\n", i, gc_bytes_written_[i] / (1024 * 1024));
+    sumGC += gc_bytes_written_[i];
+  }
+  printf("Data Movement in Garbage Collecting %lu MB\n", sumGC / (1024 * 1024));
   for (const auto z : meta_zones) {
     delete z;
   }

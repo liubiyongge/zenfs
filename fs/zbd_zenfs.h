@@ -15,7 +15,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
+#include <vector>
+#include <algorithm>
+#include <numeric>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -149,7 +151,8 @@ class ZonedBlockDevice {
   time_t start_time_;
   uint32_t finish_threshold_ = 0;
   std::atomic<uint64_t> bytes_written_{0};
-  std::atomic<uint64_t> gc_bytes_written_{0};
+  // std::mutex gclk; 单线程GC不需要锁
+  std::vector<uint64_t> gc_bytes_written_;
 
   std::atomic<long> active_io_zones_;
   std::atomic<long> open_io_zones_;
@@ -231,9 +234,13 @@ class ZonedBlockDevice {
                            uint32_t min_capacity);
 
   void AddBytesWritten(uint64_t written) { bytes_written_ += written; };
-  void AddGCBytesWritten(uint64_t written) { gc_bytes_written_ += written; };
+  void AddGCBytesWritten(uint64_t written, Env::WriteLifeTimeHint file_lifetime) { 
+    
+    gc_bytes_written_[file_lifetime] += written; 
+    
+  };
   uint64_t GetUserBytesWritten() {
-    return bytes_written_.load() - gc_bytes_written_.load();
+    return bytes_written_.load() -  std::accumulate(gc_bytes_written_.begin(), gc_bytes_written_.end(), 0);
   };
   uint64_t GetTotalBytesWritten() { return bytes_written_.load(); };
 
