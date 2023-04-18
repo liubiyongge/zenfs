@@ -162,6 +162,7 @@ class ZoneFile {
   IOType GetIOType() const { return io_type_; };
   bool IsDeleted() const { return is_deleted_; };
   void SetDeleted() { is_deleted_ = true; };
+  uint64_t GetFileId() {return file_id_;};
   IOStatus RecoverSparseExtents(uint64_t start, uint64_t end, Zone* zone);
 
  public:

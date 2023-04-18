@@ -19,7 +19,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -502,7 +502,7 @@ IOStatus ZoneFile::BufferedAppend(char* buffer, uint32_t data_size) {
     s = AllocateNewZone();
     if (!s.ok()) return s;
   }
-
+  // SPDLOG_INFO("BufferedAppend {} {}", file_id_, data_size);
   while (left) {
     wr_size = left;
     if (wr_size > active_zone_->capacity_) wr_size = active_zone_->capacity_;
@@ -557,7 +557,7 @@ IOStatus ZoneFile::SparseAppend(char* sparse_buffer, uint32_t data_size) {
     s = AllocateNewZone();
     if (!s.ok()) return s;
   }
-
+  // SPDLOG_INFO("SparseAppend {} {}", file_id_, data_size);
   while (left) {
     wr_size = left + ZoneFile::SPARSE_HEADER_SIZE;
     if (wr_size > active_zone_->capacity_) wr_size = active_zone_->capacity_;
@@ -614,7 +614,7 @@ IOStatus ZoneFile::Append(void* data, int data_size) {
     s = AllocateNewZone();
     if (!s.ok()) return s;
   }
-
+  // SPDLOG_INFO("Append {} {}", file_id_, data_size);
   while (left) {
     if (active_zone_->capacity_ == 0) {
       PushExtent();
@@ -961,7 +961,6 @@ IOStatus ZonedWritableFile::BufferedWrite(const Slice& slice) {
   uint32_t data_left = slice.size();
   char* data = (char*)slice.data();
   IOStatus s;
-
   while (data_left) {
     uint32_t buffer_left = buffer_sz - buffer_pos;
     uint32_t to_buffer;
