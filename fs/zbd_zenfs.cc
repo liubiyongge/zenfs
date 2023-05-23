@@ -172,10 +172,32 @@ Zone *ZonedBlockDevice::GetIOZone(uint64_t offset) {
   return nullptr;
 }
 
+void ZonedBlockDevice::InitialLevelZones(){
+  //加锁
+  std::unique_lock<std::mutex> lk(level_zones_mtx);
+  IOStatus s = IOStatus::OK();
+  Zone *allocated = nullptr;
+  for(int i = 0; i < diff_level_num; i++){
+    WaitForOpenIOZoneToken(false);
+    bool get_token = false;
+    while (!get_token) get_token = GetActiveIOZoneTokenIfAvailable();
+    
+    s = AllocateEmptyZone(&allocated);
+    if(!s.ok()){
+      exit(1);
+    }
+
+    level_zones[i].insert(allocated);
+
+    level_active_io_zones[i]++;
+
+  }
+}
+
 ZonedBlockDevice::ZonedBlockDevice(std::string path, ZbdBackendType backend,
                                    std::shared_ptr<Logger> logger,
                                    std::shared_ptr<ZenFSMetrics> metrics)
-    : logger_(logger), gc_bytes_written_(11, 0), metrics_(metrics) {
+    : logger_(logger), gc_bytes_written_(11, 0), level_zones(diff_level_num), level_active_io_zones(diff_level_num), metrics_(metrics) {
   if (backend == ZbdBackendType::kBlockDev) {
     zbd_be_ = std::unique_ptr<ZbdlibBackend>(new ZbdlibBackend(path));
     Info(logger_, "New Zoned Block Device: %s", zbd_be_->GetFilename().c_str());

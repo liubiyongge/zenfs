@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <unordered_set>
 
 #include "metrics.h"
 #include "rocksdb/env.h"
@@ -171,6 +172,11 @@ class ZonedBlockDevice {
   Zone *gc_aux_zone_{nullptr};
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
+  //level zone
+  std::vector<std::unordered_set<Zone *>> level_zones;
+  std::mutex level_zones_mtx;
+  std::vector<std::atomic<long>> level_active_io_zones;
+  const uint32_t diff_level_num = 6;
 
   std::shared_ptr<ZenFSMetrics> metrics_;
 
@@ -185,6 +191,9 @@ class ZonedBlockDevice {
   virtual ~ZonedBlockDevice();
 
   IOStatus Open(bool readonly, bool exclusive);
+
+  //initial level zones
+  void InitialLevelZones();
 
   Zone *GetIOZone(uint64_t offset);
   //Get and set GC tow zones
