@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 #include <unordered_set>
+#include <spdlog/spdlog.h>
 
 #include "metrics.h"
 #include "rocksdb/env.h"
@@ -67,6 +68,7 @@ class Zone {
   uint64_t wp_;
   Env::WriteLifeTimeHint lifetime_;
   std::atomic<uint64_t> used_capacity_;
+  bool useinlevelzone_ = false;
 
   IOStatus Reset();
   IOStatus Finish();
@@ -159,8 +161,8 @@ class ZonedBlockDevice {
   std::atomic<long> open_io_zones_;
   /* Protects zone_resuorces_  condition variable, used
      for notifying changes in open_io_zones_ */
-  std::mutex zone_resources_mtx_;
-  std::condition_variable zone_resources_;
+  //std::mutex zone_resources_mtx_;
+  //std::condition_variable zone_resources_;
   std::mutex zone_deferred_status_mutex_;
   IOStatus zone_deferred_status_;
 
@@ -173,11 +175,14 @@ class ZonedBlockDevice {
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
   //level zone
-  std::vector<std::unordered_set<Zone *>> level_zones;
-  std::mutex level_zones_mtx;
-  std::vector<std::atomic<long>> level_active_io_zones;
-  const uint32_t diff_level_num = 6;
+  const uint32_t diff_level_num_ = 8;
+  const uint32_t lifetime_begin_ = 1;
+  std::vector<std::unordered_set<Zone *>> level_zones;//里面的每个zone已经获取了open_io_token active_io_token
+  std::mutex level_zones_mtx_;
+  std::condition_variable level_zone_resources_;
+  std::vector<std::atomic<long>> level_active_io_zones_;//正数就是有，0就是没了
 
+  //wal 0/1  2 3 4 5 6 
   std::shared_ptr<ZenFSMetrics> metrics_;
 
   void EncodeJsonZone(std::ostream &json_stream,
@@ -194,7 +199,12 @@ class ZonedBlockDevice {
 
   //initial level zones
   void InitialLevelZones();
-
+  bool EmitLevelZone(Zone* emit_zone);
+  void ReleaseLevelZone(Zone* release_zone, uint64_t file_id);
+  bool IsLevelZone(Zone * z){
+    return z->lifetime_ >= lifetime_begin_;
+  }
+  
   Zone *GetIOZone(uint64_t offset);
   //Get and set GC tow zones
   Zone *GetGCZone() {return gc_zone_; }
@@ -225,6 +235,7 @@ class ZonedBlockDevice {
 
   void PutOpenIOZoneToken();
   void PutActiveIOZoneToken();
+
 
   void EncodeJson(std::ostream &json_stream);
 

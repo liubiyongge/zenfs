@@ -1557,7 +1557,7 @@ Status ZenFS::Mount(bool readonly) {
     if (!status.ok()) return status;
     Info(logger_, "  Done");
     //初始化Zones
-    zbd_->InitialLevelZones();
+    zbd_->InitialLevelZones(); 
     
     if (superblock_->IsGCEnabled()) {
       Info(logger_, "Starting garbage collection worker");
