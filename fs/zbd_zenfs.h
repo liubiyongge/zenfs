@@ -175,8 +175,8 @@ class ZonedBlockDevice {
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
   //level zone
-  const uint32_t diff_level_num_ = 8;
-  const uint32_t lifetime_begin_ = 1;
+  const uint32_t diff_level_num_ = 7;
+  const uint32_t lifetime_begin_ = 2;
   std::vector<std::unordered_set<Zone *>> level_zones;//里面的每个zone已经获取了open_io_token active_io_token
   std::mutex level_zones_mtx_;
   std::condition_variable level_zone_resources_;

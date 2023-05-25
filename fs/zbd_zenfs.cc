@@ -912,7 +912,11 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
 
   long allocator_open_limit = max_nr_open_io_zones_;
   if(file_lifetime < Env::WLTH_SHORT){
-    file_lifetime = Env::WLTH_NONE;
+    if(file_id == 5){
+      file_lifetime = (Env::WriteLifeTimeHint)lifetime_begin_;
+    }else{
+      file_lifetime = (Env::WriteLifeTimeHint)8;//highest level
+    }
   }
   int level = file_lifetime - lifetime_begin_;
 
