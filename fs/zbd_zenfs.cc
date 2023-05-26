@@ -203,9 +203,16 @@ bool ZonedBlockDevice::EmitLevelZone(Zone* emit_zone){
   Debug(logger_, "lby remove zone %lu from lifetime %d", emit_zone->GetZoneNr(), (int)emit_zone->lifetime_);
   if(level_zones[emit_zone->lifetime_-lifetime_begin_].empty()){
     Zone *allocated = nullptr;
-    IOStatus s = AllocateEmptyZone(&allocated);
-    if(!s.ok()){
-      exit(1);
+    int wait_count = 0;
+    while(!allocated){
+      wait_count++;
+      IOStatus s = AllocateEmptyZone(&allocated);
+      if(!s.ok()){
+        exit(1);
+      }
+      if(!allocated){
+        usleep(std::rand() %(std::min(4000 * wait_count, 1000000)));
+      }
     }
     allocated->lifetime_ = emit_zone->lifetime_;
     level_zones[emit_zone->lifetime_-lifetime_begin_].insert(allocated);
@@ -777,6 +784,7 @@ IOStatus ZonedBlockDevice::AllocateEmptyZoneForGC(bool is_aux) {
       return s;
     }
   }
+  allocated->lifetime_ = (Env::WriteLifeTimeHint)(3 + 2);
   if (!is_aux) SetGCZone(allocated);
   else SetGCAuxZone(allocated);
 
@@ -943,13 +951,22 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
   }else{
     open_io_zones_++;
     active_io_zones_++;
-    s = AllocateEmptyZone(&allocated_zone);
-    if (!s.ok()) {//空间不足
-        active_io_zones_--;
-        open_io_zones_--;
-        level_zone_resources_.notify_all();
-        return s;
+    int wait_count = 0;
+    while(!allocated_zone){
+      wait_count++;
+      s = AllocateEmptyZone(&allocated_zone);
+      if (!s.ok()) {//空间不足
+          active_io_zones_--;
+          open_io_zones_--;
+          level_zone_resources_.notify_all();
+          return s;
+      }
+      if(!allocated_zone){
+        usleep(std::rand() %(std::min(4000 * wait_count, 1000000)));
+      }
     }
+
+    
     new_zone = 1;
     allocated_zone->lifetime_ = file_lifetime;
     level_zones[level].insert(allocated_zone);
