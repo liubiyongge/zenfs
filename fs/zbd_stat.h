@@ -39,7 +39,7 @@ public:
     reclaim_capacity(z.max_capacity - z.used_capacity - z.capacity),
     //write_position(zs.WritePosition()),
     start_position(z.start),
-    lifetime(z.lifetime) {}
+    lifetime(z.lifetime_) {}
 
   ~BDZoneStat() = default;
 

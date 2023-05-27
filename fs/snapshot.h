@@ -82,10 +82,12 @@ class ZoneFileSnapshot {
   uint64_t file_id;
   std::string filename;
   std::vector<ZoneExtentSnapshot> extents;
+  Env::WriteLifeTimeHint lifetime;
 
  public:
   ZoneFileSnapshot(ZoneFile& file)
       : file_id(file.GetID()), filename(file.GetFilename()) {
+        lifetime = file.GetWriteLifeTimeHint();
     for (const auto* extent : file.GetExtents()) {
       extents.emplace_back(*extent, filename);
     }

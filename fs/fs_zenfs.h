@@ -26,6 +26,7 @@ namespace fs = std::filesystem;
 #include "snapshot.h"
 #include "version.h"
 #include "zbd_zenfs.h"
+#include "zbd_stat.h"
 
 #ifndef WITH_TERARKDB
   #define WITH_TERARKDB
@@ -282,7 +283,7 @@ class ZenFS : public FileSystemWrapper {
     return  zbd_;
 
   }
-  void ZenFS::GetStat(BDZenFSStat& stat);
+  void GetStat(BDZenFSStat& stat);
   explicit ZenFS(ZonedBlockDevice* zbd, std::shared_ptr<FileSystem> aux_fs,
                  std::shared_ptr<Logger> logger);
   virtual ~ZenFS();
