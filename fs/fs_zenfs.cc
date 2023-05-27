@@ -373,6 +373,18 @@ void ZenFS::GCWorker() {
   }
 }
 
+void ZenFS::GetStat(BDZenFSStat& stat) {
+  ZenFSSnapshot snapshot;
+  ZenFSSnapshotOptions options;
+
+  options.zone_ = 1;
+  options.zone_file_ = 1;
+  options.log_garbage_ = 1;
+
+  GetZenFSSnapshot(snapshot, options);
+  stat.SetStat(snapshot);
+}
+
 IOStatus ZenFS::Repair() {
   std::map<std::string, std::shared_ptr<ZoneFile>>::iterator it;
   for (it = files_.begin(); it != files_.end(); it++) {

@@ -282,6 +282,7 @@ class ZenFS : public FileSystemWrapper {
     return  zbd_;
 
   }
+  void ZenFS::GetStat(BDZenFSStat& stat);
   explicit ZenFS(ZonedBlockDevice* zbd, std::shared_ptr<FileSystem> aux_fs,
                  std::shared_ptr<Logger> logger);
   virtual ~ZenFS();
