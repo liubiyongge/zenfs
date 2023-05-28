@@ -443,22 +443,20 @@ void ZonedBlockDevice::LogGarbageInfo() {
   Info(logger_, "%s", ss.str().data());
 }
 
-ZonedBlockDevice::~ZonedBlockDevice() {
-  uint64_t sumGC = 0;
-  int len = gc_bytes_written_.size();
-  for(int i = 0; i < len; i++){
-    printf("Lifetime %d Data Movement in Garbage Collecting %lu MB\n", i, gc_bytes_written_[i] / (1024 * 1024));
-    sumGC += gc_bytes_written_[i];
+void ZonedBlockDevice::PrintDataMovementSize(){
+    uint64_t sumGC = 0;
+    int len = gc_bytes_written_.size();
+    for(int i = 0; i < len; i++){
+      printf("Lifetime %d Data Movement in Garbage Collecting %lu MB\n", i, gc_bytes_written_[i] / (1024 * 1024));
+      sumGC += gc_bytes_written_[i];
+    }
+    printf("Data Movement in Garbage Collecting %lu MB\n", sumGC / (1024 * 1024));
   }
-  printf("Data Movement in Garbage Collecting %lu MB\n", sumGC / (1024 * 1024));
+ZonedBlockDevice::~ZonedBlockDevice() {
+  PrintDataMovementSize();
   for (const auto z : meta_zones) {
     delete z;
   }
-
-  for (const auto z : io_zones) {
-    delete z;
-  }
-}
 
 #define LIFETIME_DIFF_NOT_GOOD (100)
 #define LIFETIME_DIFF_COULD_BE_WORSE (50)

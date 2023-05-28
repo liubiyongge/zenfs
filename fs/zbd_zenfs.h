@@ -263,7 +263,7 @@ class ZonedBlockDevice {
     return bytes_written_.load() -  std::accumulate(gc_bytes_written_.begin(), gc_bytes_written_.end(), 0);
   };
   uint64_t GetTotalBytesWritten() { return bytes_written_.load(); };
-
+  void PrintDataMovementSize();
  private:
   IOStatus GetZoneDeferredStatus();
   bool GetActiveIOZoneTokenIfAvailable();
