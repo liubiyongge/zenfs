@@ -169,6 +169,10 @@ class ZonedBlockDevice {
   //Preserve tow zones for gC
   Zone *gc_zone_{nullptr};
   Zone *gc_aux_zone_{nullptr};
+
+  std::mutex short_live_zone_resources_mtx_;
+  std::condition_variable short_live_zone_resources_;
+  Zone *short_live_zone_;
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
 
@@ -191,7 +195,20 @@ class ZonedBlockDevice {
   Zone *GetGCZone() {return gc_zone_; }
   void SetGCZone(Zone *zone) { gc_zone_ = zone; }
   Zone *GetGCAuxZone() {return gc_aux_zone_; }
-  void SetGCAuxZone(Zone *zone) { gc_aux_zone_ = zone; }  
+  void SetGCAuxZone(Zone *zone) { gc_aux_zone_ = zone; }
+  void InitShortLiveZone(){
+    Zone *allocated = nullptr;
+    open_io_zones_++;
+    active_io_zones_++;
+    s = AllocateEmptyZone(&allocated);
+    if(!s.ok()){
+      exit(1);
+    }
+    allocated->lifetime_ = (Env::WriteLifeTimeHint)(0);
+    short_live_zone_ = allocated;
+    Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());       
+
+  }
   IOStatus AllocateIOZone(Env::WriteLifeTimeHint file_lifetime, IOType io_type,
                           Zone **out_zone, uint64_t file_id);
   IOStatus AllocateMetaZone(Zone **out_meta_zone);
