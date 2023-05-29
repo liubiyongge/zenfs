@@ -329,7 +329,7 @@ void ZenFS::GCWorker() {
       if(zone.start == zbd_->GetGCZone()->start_) continue;
       if(zbd_->GetGCAuxZone() && zone.start == zbd_->GetGCAuxZone()->start_) continue;
       //level 0 and shortlife zone不用回收
-      if(zone.lifetime_ == Env::WLTH_MEDIUM || zone.lifetime_ == (Env::WriteLifeTimeHint)(100)) continue;
+      if(zone.lifetime_ == Env::WLTH_MEDIUM) continue;
       
       uint64_t garbage_percent_approx =
              100 - 100 * zone.used_capacity / zone.max_capacity;
