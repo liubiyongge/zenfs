@@ -850,7 +850,17 @@ IOStatus ZonedBlockDevice::AllocateIOZone(Env::WriteLifeTimeHint file_lifetime,
     }
   }
   if(file_lifetime == (Env::WriteLifeTimeHint)(100)){
-    
+    std::unique_lock<std::mutex> lk(shortlive_zone_resources_mtx_);
+    shortlive_zone_resources_.wait(lk, [this]{
+      if(!shortlive_zone_inuse_){
+        shortlive_zone_inuse_ = true;
+        return true;
+      }else{
+        return false;
+      }
+    });
+    allocated_zone = shortlive_zone_;
+
   }else{
     WaitForOpenIOZoneToken(io_type == IOType::kWAL);
 

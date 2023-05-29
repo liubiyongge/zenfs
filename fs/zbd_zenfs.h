@@ -170,9 +170,11 @@ class ZonedBlockDevice {
   Zone *gc_zone_{nullptr};
   Zone *gc_aux_zone_{nullptr};
 
-  std::mutex short_live_zone_resources_mtx_;
-  std::condition_variable short_live_zone_resources_;
-  Zone *short_live_zone_;
+  std::mutex shortlive_zone_resources_mtx_;
+  std::condition_variable shortlive_zone_resources_;
+  std::atomic<bool> shortlive_zone_inuse_{false}; 
+  Zone *shortlive_zone_;
+
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
 
@@ -189,7 +191,9 @@ class ZonedBlockDevice {
   virtual ~ZonedBlockDevice();
 
   IOStatus Open(bool readonly, bool exclusive);
-
+  Zone *GetShortLiveZone(){
+    return shortlive_zone_;
+  }
   Zone *GetIOZone(uint64_t offset);
   //Get and set GC tow zones
   Zone *GetGCZone() {return gc_zone_; }
@@ -204,10 +208,43 @@ class ZonedBlockDevice {
     if(!s.ok()){
       exit(1);
     }
-    allocated->lifetime_ = (Env::WriteLifeTimeHint)(0);
+    allocated->lifetime_ = (Env::WriteLifeTimeHint)(100);
+    shortlive_zone_resources_mtx_.lock();
     short_live_zone_ = allocated;
+    shortlive_zone_inuse_ = false;
+    shortlive_zone_resources_mtx_.unlock();
     Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());       
 
+  }
+  void ReplaceShortLiveZone(uint64_t file_id){
+    std::unique_lock<std::mutex> lk(shortlive_zone_resources_mtx_);
+    shortlive_zone_inuse_ = false;
+    Debug(logger_, "lby release shortlive zone %lu from file %lu", shortlive_zone_->GetZoneNr(), file_id);
+    shortlive_zone_->Release();
+    Debug(logger_, "lby remove zone %lu from shortlive zoned", emit_zone->GetZoneNr());
+    Zone* allocated = nullptr;
+    int wait_count = 0;
+    while(!allocated){
+      wait_count++;
+      IOStatus s = AllocateEmptyZone(&allocated);
+      if(!s.ok()){
+        exit(1);
+      }
+      if(!allocated){
+        usleep(std::rand() %(std::min(4000 * wait_count, 1000000)));
+      }      
+    }
+    allocated->lifetime_ = (Env::WriteLifeTimeHint)(100);
+    shortlive_zone_ = allocated;
+    Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());
+    shortlive_zone_resources_.notify_one();
+
+  }
+  void ReleaseShortLiveZone(uint64_t file_id){
+    std::unique_lock<std::mutex> lk(shortlive_zone_resources_mtx_);
+    shortlive_zone_inuse_ = false;
+    Debug(logger_, "lby release shortlive zone %lu from file %lu", shortlive_zone_->GetZoneNr(), file_id);
+    shortlive_zone_resources_.notify_one();
   }
   IOStatus AllocateIOZone(Env::WriteLifeTimeHint file_lifetime, IOType io_type,
                           Zone **out_zone, uint64_t file_id);
