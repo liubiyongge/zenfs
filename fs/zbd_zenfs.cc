@@ -382,7 +382,7 @@ void ZonedBlockDevice::LogGarbageInfo() {
   Info(logger_, "%s", ss.str().data());
 }
 
-ZonedBlockDevice::~ZonedBlockDevice() {
+void ZonedBlockDevice::PrintDataMovementSize(){
   uint64_t sumGC = 0;
   int len = gc_bytes_written_.size();
   for(int i = 0; i < len; i++){
@@ -390,6 +390,10 @@ ZonedBlockDevice::~ZonedBlockDevice() {
     sumGC += gc_bytes_written_[i];
   }
   printf("Data Movement in Garbage Collecting %lu MB\n", sumGC / (1024 * 1024));
+}
+
+ZonedBlockDevice::~ZonedBlockDevice() {
+  PrintDataMovementSize();
   for (const auto z : meta_zones) {
     delete z;
   }
