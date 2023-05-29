@@ -204,13 +204,13 @@ class ZonedBlockDevice {
     Zone *allocated = nullptr;
     open_io_zones_++;
     active_io_zones_++;
-    s = AllocateEmptyZone(&allocated);
+    auto s = AllocateEmptyZone(&allocated);
     if(!s.ok()){
       exit(1);
     }
     allocated->lifetime_ = (Env::WriteLifeTimeHint)(100);
     shortlive_zone_resources_mtx_.lock();
-    short_live_zone_ = allocated;
+    shortlive_zone_ = allocated;
     shortlive_zone_inuse_ = false;
     shortlive_zone_resources_mtx_.unlock();
     Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());       
@@ -221,7 +221,7 @@ class ZonedBlockDevice {
     shortlive_zone_inuse_ = false;
     Debug(logger_, "lby release shortlive zone %lu from file %lu", shortlive_zone_->GetZoneNr(), file_id);
     shortlive_zone_->Release();
-    Debug(logger_, "lby remove zone %lu from shortlive zoned", emit_zone->GetZoneNr());
+    Debug(logger_, "lby remove zone %lu from shortlive zoned", shortlive_zone_->GetZoneNr());
     Zone* allocated = nullptr;
     int wait_count = 0;
     while(!allocated){
