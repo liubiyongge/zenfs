@@ -269,14 +269,27 @@ IOStatus ZoneFile::CloseActiveZone() {
   if (active_zone_) {
     bool full = active_zone_->IsFull();
     s = active_zone_->Close();
-    ReleaseActiveZone();
     if (!s.ok()) {
       return s;
     }
-    zbd_->PutOpenIOZoneToken();
-    if (full) {
-      zbd_->PutActiveIOZoneToken();
+    if(zbd_->IsLevelZone(active_zone_)){// in level zone
+      if(full){
+        if(zbd_->EmitLevelZone(active_zone_)){
+          zbd_->ReleaseLevelZone(active_zone_, file_id_);
+        }
+      }else{
+        zbd_->ReleaseLevelZone(active_zone_, file_id_);
+      }
+      active_zone_ = nullptr;
+    }else{
+      zbd_->PutOpenIOZoneToken();
+      if (full) {
+        zbd_->PutActiveIOZoneToken();
+      }
+      ReleaseActiveZone();
     }
+    
+
   }
   return s;
 }

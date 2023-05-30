@@ -286,9 +286,9 @@ void ZenFS::GCWorker() {
     // if(!nr_zone_waiting_for_gc){
     //   usleep(1000 * 1000 * 10);
     // }
-    /* If there is no zones waiting for gc, wait for 1s. */
+    /* If there is no zones waiting for gc, wait for 0.1s. */
     if(!nr_zone_waiting_for_gc){
-      usleep(1000 * 1000 * 1);
+      usleep(1000 * 100 * 1);
     }
     //static space uti
     uint64_t non_free = zbd_->GetUsedSpace() + zbd_->GetReclaimableSpace();
@@ -296,7 +296,7 @@ void ZenFS::GCWorker() {
     uint64_t free_percent = (100 * free) / (free + non_free);
     ZenFSSnapshot snapshot;
     ZenFSSnapshotOptions options;
-
+    nr_zone_waiting_for_gc = 0;
     if (free_percent > GC_START_LEVEL) continue;
 
     options.zone_ = 1;
@@ -304,9 +304,7 @@ void ZenFS::GCWorker() {
     options.log_garbage_ = 1;
 
     GetZenFSSnapshot(snapshot, options);
-
-    //空闲空间小于20才会开始垃圾回收，如freepecert = 10 垃圾率70%以上Zone的开始来及,依次回收所有Zone
-    uint64_t threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));    
+   
     std::set<uint64_t> migrate_zones_start;
     //空闲空间小于20才会开始垃圾回收，如freepecert = 10 垃圾率70%以上Zone的开始来及,一次回收所有Zone
     // for (const auto& zone : snapshot.zones_) {
@@ -320,30 +318,33 @@ void ZenFS::GCWorker() {
     //   }
     // }
     uint64_t migrate_zone_start = 0;
+    uint64_t migrate_zone_garbage_score = 0;
     uint64_t migrate_zone_garbage_percent = 0;
-    nr_zone_waiting_for_gc = 0;
     zones_skipgc = GetZonesSkipGC();
     for (const auto& zone : snapshot.zones_) {
       if(zone.capacity != 0) continue;
       if(zones_skipgc.count(zone.start)!= 0) continue;
       if(zone.start == zbd_->GetGCZone()->start_) continue;
       if(zbd_->GetGCAuxZone() && zone.start == zbd_->GetGCAuxZone()->start_) continue;
-      //level 0不用回收
+      //level 0/1不用回收
       if(zone.lifetime_ == Env::WLTH_MEDIUM) continue;
       
       uint64_t garbage_percent_approx =
              100 - 100 * zone.used_capacity / zone.max_capacity;
+      uint64_t threshold = threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));
       //无效空间占比为小，为0则不用垃圾回收。
       if(garbage_percent_approx > threshold && garbage_percent_approx < 100){
         nr_zone_waiting_for_gc++;
-        if(garbage_percent_approx > migrate_zone_garbage_percent){
+        uint64_t zone_score = garbage_percent_approx - threshold;
+        if(zone_score > migrate_zone_garbage_score){
           migrate_zone_start = zone.start;
+          migrate_zone_garbage_score = zone_score;
           migrate_zone_garbage_percent = garbage_percent_approx;
         }
       }
     }
     //没选取到Zone则继续等待
-    if(migrate_zone_garbage_percent == 0) continue;
+    if(migrate_zone_garbage_score == 0) continue;
     //一次回收一个Zone
     std::vector<ZoneExtentSnapshot*> migrate_exts;
     for (auto& ext : snapshot.extents_) {
@@ -1568,7 +1569,9 @@ Status ZenFS::Mount(bool readonly) {
     IOStatus status = zbd_->ResetUnusedIOZones();
     if (!status.ok()) return status;
     Info(logger_, "  Done");
-
+    //初始化Zones
+    zbd_->InitialLevelZones(); 
+    
     if (superblock_->IsGCEnabled()) {
       Info(logger_, "Starting garbage collection worker");
       run_gc_worker_ = true;
