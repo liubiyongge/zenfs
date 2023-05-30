@@ -192,7 +192,6 @@ class ZonedBlockDevice {
   void SetGCZone(Zone *zone) { gc_zone_ = zone; }
   Zone *GetGCAuxZone() {return gc_aux_zone_; }
   void SetGCAuxZone(Zone *zone) { gc_aux_zone_ = zone; }  
-  void PrintDataMovementSize();
   IOStatus AllocateIOZone(Env::WriteLifeTimeHint file_lifetime, IOType io_type,
                           Zone **out_zone, uint64_t file_id);
   IOStatus AllocateMetaZone(Zone **out_meta_zone);
