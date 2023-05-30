@@ -278,6 +278,9 @@ class ZenFS : public FileSystemWrapper {
                             IODebugContext* dbg, bool reopen);
 
  public:
+  ZonedBlockDevice *GetZBD(){
+    return zbd_;
+  }
   explicit ZenFS(ZonedBlockDevice* zbd, std::shared_ptr<FileSystem> aux_fs,
                  std::shared_ptr<Logger> logger);
   virtual ~ZenFS();
@@ -463,7 +466,7 @@ class ZenFS : public FileSystemWrapper {
 
  private:
   const uint64_t GC_START_LEVEL =
-      20;                      /* Enable GC when < 20% free space available */
+      10;                      /* Enable GC when < 20% free space available */
   const uint64_t GC_SLOPE = 3; /* GC agressiveness */
   void GCWorker();
 };

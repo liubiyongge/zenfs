@@ -452,11 +452,17 @@ void ZonedBlockDevice::PrintDataMovementSize(){
     }
     printf("Data Movement in Garbage Collecting %lu MB\n", sumGC / (1024 * 1024));
   }
+
 ZonedBlockDevice::~ZonedBlockDevice() {
   PrintDataMovementSize();
   for (const auto z : meta_zones) {
     delete z;
   }
+
+  for (const auto z : io_zones) {
+    delete z;
+  }
+}
 
 #define LIFETIME_DIFF_NOT_GOOD (100)
 #define LIFETIME_DIFF_COULD_BE_WORSE (50)
@@ -782,7 +788,7 @@ IOStatus ZonedBlockDevice::AllocateEmptyZoneForGC(bool is_aux) {
       return s;
     }
   }
-  allocated->lifetime_ = (Env::WriteLifeTimeHint)(3 + 2);
+  allocated->lifetime_ = (Env::WriteLifeTimeHint)(4 + 2);
   if (!is_aux) SetGCZone(allocated);
   else SetGCAuxZone(allocated);
 
