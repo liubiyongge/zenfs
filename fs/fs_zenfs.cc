@@ -331,7 +331,7 @@ void ZenFS::GCWorker() {
       
       uint64_t garbage_percent_approx =
              100 - 100 * zone.used_capacity / zone.max_capacity;
-      uint64_t threshold = threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));
+      uint64_t threshold = (100 - GC_SLOPE * (GC_START_LEVEL - free_percent));
       //无效空间占比为小，为0则不用垃圾回收。
       if(garbage_percent_approx > threshold && garbage_percent_approx < 100){
         nr_zone_waiting_for_gc++;
