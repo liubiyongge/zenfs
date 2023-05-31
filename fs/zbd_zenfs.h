@@ -172,12 +172,67 @@ class ZonedBlockDevice {
   unsigned int max_nr_active_io_zones_;
   unsigned int max_nr_open_io_zones_;
 
+  std::mutex l6_zone_resources_mtx_;
+  std::condition_variable l6_zone_resources_;
+  std::atomic<bool> l6_zone_inuse_{false}; 
+  Zone *l6_zone_;  
+
   std::shared_ptr<ZenFSMetrics> metrics_;
 
   void EncodeJsonZone(std::ostream &json_stream,
                       const std::vector<Zone *> zones);
 
  public:
+  Zone *Getl6Zone(){
+    return l6_zone_;
+  }
+  void InitL6Zone(){
+    Zone *allocated = nullptr;
+    open_io_zones_++;
+    active_io_zones_++;
+    auto s = AllocateEmptyZone(&allocated);
+    if(!s.ok()){
+      exit(1);
+    }
+    allocated->lifetime_ = (Env::WriteLifeTimeHint)(8);
+    l6_zone_resources_mtx_.lock();
+    l6_zone_ = allocated;
+    l6_zone_inuse_ = false;
+    l6_zone_resources_mtx_.unlock();
+    Debug(logger_, "lby allocate zone %lu for l6 sst", allocated->GetZoneNr());       
+
+  }
+  void Replacel6Zone(uint64_t file_id){
+    std::unique_lock<std::mutex> lk(l6_zone_resources_mtx_);
+    l6_zone_inuse_ = false;
+    Debug(logger_, "lby release l6 zone %lu from file %lu", l6_zone_->GetZoneNr(), file_id);
+    l6_zone_->Release();
+    Debug(logger_, "lby remove zone %lu from l6 zone", l6_zone_->GetZoneNr());
+    Zone* allocated = nullptr;
+    int wait_count = 0;
+    while(!allocated){
+      wait_count++;
+      IOStatus s = AllocateEmptyZone(&allocated);
+      if(!s.ok()){
+        exit(1);
+      }
+      if(!allocated){
+        usleep(std::rand() %(std::min(4000 * wait_count, 1000000)));
+      }      
+    }
+    allocated->lifetime_ = (Env::WriteLifeTimeHint)(8);
+    l6_zone_ = allocated;
+    Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());
+    l6_zone_resources_.notify_one();
+
+  }
+
+  void Releasel6Zone(uint64_t file_id){
+    std::unique_lock<std::mutex> lk(l6_zone_resources_mtx_);
+    l6_zone_inuse_ = false;
+    Debug(logger_, "lby release l6 zone %lu from file %lu", l6_zone_->GetZoneNr(), file_id);
+    l6_zone_resources_.notify_one();
+  }
   explicit ZonedBlockDevice(std::string path, ZbdBackendType backend,
                             std::shared_ptr<Logger> logger,
                             std::shared_ptr<ZenFSMetrics> metrics =

@@ -1556,7 +1556,7 @@ Status ZenFS::Mount(bool readonly) {
     IOStatus status = zbd_->ResetUnusedIOZones();
     if (!status.ok()) return status;
     Info(logger_, "  Done");
-
+    zbd_->InitL6Zone();
     if (superblock_->IsGCEnabled()) {
       Info(logger_, "Starting garbage collection worker");
       run_gc_worker_ = true;
