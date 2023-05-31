@@ -717,6 +717,7 @@ IOStatus ZonedBlockDevice::AllocateEmptyZoneForGC(bool is_aux) {
       return s;
     }
   }
+  allocated->lifetime_ = (Env::WriteLifeTimeHint)(4 + 2);
   if (!is_aux) SetGCZone(allocated);
   else SetGCAuxZone(allocated);
 
