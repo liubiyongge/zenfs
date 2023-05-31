@@ -374,18 +374,6 @@ void ZenFS::GCWorker() {
   }
 }
 
-IOStatus ZenFS::Repair() {
-  std::map<std::string, std::shared_ptr<ZoneFile>>::iterator it;
-  for (it = files_.begin(); it != files_.end(); it++) {
-    std::shared_ptr<ZoneFile> zFile = it->second;
-    if (zFile->HasActiveExtent()) {
-      IOStatus s = zFile->Recover();
-      if (!s.ok()) return s;
-    }
-  }
-
-  return IOStatus::OK();
-}
 
 
 IOStatus ZenFS::Repair() {
