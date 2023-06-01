@@ -222,7 +222,7 @@ class ZonedBlockDevice {
     }
     allocated->lifetime_ = (Env::WriteLifeTimeHint)(8);
     l6_zone_ = allocated;
-    Debug(logger_, "lby allocate zone %lu for short-live sst", allocated->GetZoneNr());
+    Debug(logger_, "lby allocate zone %lu for l6 sst", allocated->GetZoneNr());
     l6_zone_resources_.notify_one();
 
   }
